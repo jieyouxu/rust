@@ -4,34 +4,30 @@ use std::collections::HashSet;
 
 const EXTRA_ARCHS: &[&str] = &["spirv"];
 
-pub(super) fn handle_ignore(config: &Config, line: &str) -> IgnoreDecision {
-    let parsed = parse_cfg_name_directive(config, line, "ignore");
+pub(super) fn handle_ignore(
+    config: &Config,
+    line: &str,
+    act_on_line: impl FnMut(),
+) -> IgnoreDecision {
+    let parsed = parse_cfg_name_directive(config, line, "ignore", act_on_line);
     match parsed.outcome {
         MatchOutcome::NoMatch => IgnoreDecision::Continue,
-        MatchOutcome::Match => IgnoreDecision::Ignore {
-            reason: match parsed.comment {
-                Some(comment) => format!("ignored {} ({comment})", parsed.pretty_reason.unwrap()),
-                None => format!("ignored {}", parsed.pretty_reason.unwrap()),
-            },
-        },
+        MatchOutcome::Match => IgnoreDecision::Continue,
         MatchOutcome::Invalid => IgnoreDecision::Error { message: format!("invalid line: {line}") },
         MatchOutcome::External => IgnoreDecision::Continue,
         MatchOutcome::NotADirective => IgnoreDecision::Continue,
     }
 }
 
-pub(super) fn handle_only(config: &Config, line: &str) -> IgnoreDecision {
-    let parsed = parse_cfg_name_directive(config, line, "only");
+pub(super) fn handle_only(
+    config: &Config,
+    line: &str,
+    act_on_line: impl FnMut(),
+) -> IgnoreDecision {
+    let parsed = parse_cfg_name_directive(config, line, "only", act_on_line);
     match parsed.outcome {
         MatchOutcome::Match => IgnoreDecision::Continue,
-        MatchOutcome::NoMatch => IgnoreDecision::Ignore {
-            reason: match parsed.comment {
-                Some(comment) => {
-                    format!("only executed {} ({comment})", parsed.pretty_reason.unwrap())
-                }
-                None => format!("only executed {}", parsed.pretty_reason.unwrap()),
-            },
-        },
+        MatchOutcome::NoMatch => IgnoreDecision::Continue,
         MatchOutcome::Invalid => IgnoreDecision::Error { message: format!("invalid line: {line}") },
         MatchOutcome::External => IgnoreDecision::Continue,
         MatchOutcome::NotADirective => IgnoreDecision::Continue,
@@ -44,6 +40,7 @@ pub(super) fn parse_cfg_name_directive<'a>(
     config: &Config,
     line: &'a str,
     prefix: &str,
+    mut act_on_line: impl FnMut(),
 ) -> ParsedNameDirective<'a> {
     if !line.as_bytes().starts_with(prefix.as_bytes()) {
         return ParsedNameDirective::not_a_directive();
@@ -88,7 +85,9 @@ pub(super) fn parse_cfg_name_directive<'a>(
             $(else if $allowed_names.custom_contains(name) {
                 message = Some(format_message());
                 outcome = MatchOutcome::NoMatch;
-            })?
+            })?;
+
+            act_on_line();
         }};
     }
 

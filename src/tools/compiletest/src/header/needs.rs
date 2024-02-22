@@ -5,7 +5,10 @@ pub(super) fn handle_needs(
     cache: &CachedNeedsConditions,
     config: &Config,
     ln: &str,
+    mut act_on_line: impl FnMut(),
 ) -> IgnoreDecision {
+    let ln = ln.trim_start();
+
     // Note thet we intentionally still put the needs- prefix here to make the file show up when
     // grepping for a directive name, even though we could technically strip that.
     let needs = &[
@@ -141,8 +144,8 @@ pub(super) fn handle_needs(
         },
     ];
 
-    let (name, comment) = match ln.split_once([':', ' ']) {
-        Some((name, comment)) => (name, Some(comment)),
+    let (name, _comment) = match ln.split_once([':', ' ']) {
+        Some((name, comment)) => (name.trim_start(), Some(comment.trim_start())),
         None => (ln, None),
     };
 
@@ -155,29 +158,14 @@ pub(super) fn handle_needs(
         return IgnoreDecision::Continue;
     }
 
-    let mut found_valid = false;
     for need in needs {
         if need.name == name {
-            if need.condition {
-                found_valid = true;
-                break;
-            } else {
-                return IgnoreDecision::Ignore {
-                    reason: if let Some(comment) = comment {
-                        format!("{} ({comment})", need.ignore_reason)
-                    } else {
-                        need.ignore_reason.into()
-                    },
-                };
-            }
+            act_on_line();
+            break;
         }
     }
 
-    if found_valid {
-        IgnoreDecision::Continue
-    } else {
-        IgnoreDecision::Error { message: format!("invalid needs directive: {name}") }
-    }
+    IgnoreDecision::Continue
 }
 
 struct Need {

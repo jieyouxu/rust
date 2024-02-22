@@ -1,5 +1,3 @@
-// should-fail
-
 #![allow(unused)]
 
 trait Foo<T>: Sized {

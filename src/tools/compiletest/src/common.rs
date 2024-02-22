@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub use self::Mode::*;
 
 use std::ffi::OsString;

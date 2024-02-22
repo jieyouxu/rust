@@ -10,11 +10,11 @@
 
 #[cfg(foo)]
 fn die() {
-    panic!("foo");
+    panic!("bar");
 }
 #[cfg(bar)]
 fn die() {
-    panic!("bar");
+    panic!("foo");
 }
 
 fn main() {

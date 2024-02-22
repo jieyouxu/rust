@@ -1,6 +1,5 @@
 // only-x86_64
 // compile-flags:--test -C target-feature=+avx
-// should-fail
 
 /// (written on a spider's web) Some Struct
 ///

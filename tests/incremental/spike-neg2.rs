@@ -6,7 +6,7 @@
 // revision rpass2 will not compile, despite being named rpass).
 
 // revisions:rpass1 rpass2
-// should-fail
+// check-pass
 
 #![feature(rustc_attrs)]
 

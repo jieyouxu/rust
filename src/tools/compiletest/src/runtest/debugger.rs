@@ -25,7 +25,7 @@ impl DebuggerCommands {
         config: &Config,
         debugger_prefixes: &[&str],
         rev: Option<&str>,
-    ) -> Result<Self, String> {
+    ) -> Result<(Self, Vec<String>), String> {
         let directives = debugger_prefixes
             .iter()
             .map(|prefix| (format!("{prefix}-command"), format!("{prefix}-check")))
@@ -36,9 +36,13 @@ impl DebuggerCommands {
         let mut check_lines = vec![];
         let mut counter = 0;
         let reader = BufReader::new(File::open(file).unwrap());
+
+        let mut directive_lines = Vec::new();
+
         for (line_no, line) in reader.lines().enumerate() {
             counter += 1;
             let line = line.map_err(|e| format!("Error while parsing debugger commands: {}", e))?;
+            let og_line = line.clone();
             let (lnrev, line) = line_directive("//", &line).unwrap_or((None, &line));
 
             // Skip any revision specific directive that doesn't match the current
@@ -51,18 +55,25 @@ impl DebuggerCommands {
                 breakpoint_lines.push(counter);
             }
 
+            let mut act_on_line = || {
+                directive_lines.push(og_line.to_owned());
+            };
+
             for &(ref command_directive, ref check_directive) in &directives {
                 config
-                    .parse_name_value_directive(&line, command_directive)
+                    .parse_name_value_directive(&line, command_directive, &mut act_on_line)
                     .map(|cmd| commands.push(cmd));
 
                 config
-                    .parse_name_value_directive(&line, check_directive)
+                    .parse_name_value_directive(&line, check_directive, &mut act_on_line)
                     .map(|cmd| check_lines.push((line_no, cmd)));
             }
         }
 
-        Ok(Self { commands, breakpoint_lines, check_lines, file: file.to_owned() })
+        Ok((
+            Self { commands, breakpoint_lines, check_lines, file: file.to_owned() },
+            directive_lines,
+        ))
     }
 
     /// Given debugger output and lines to check, ensure that every line is

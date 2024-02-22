@@ -25,7 +25,7 @@ use build_helper::git::{get_git_modified_files, get_git_untracked_files};
 use core::panic;
 use getopts::Options;
 use lazycell::AtomicLazyCell;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, ErrorKind};
@@ -37,7 +37,7 @@ use test::ColorConfig;
 use tracing::*;
 use walkdir::WalkDir;
 
-use self::header::{make_test_description, EarlyProps};
+use self::header::{make_test_description, EarlyProps, TestProps};
 use crate::header::HeadersCache;
 use std::sync::Arc;
 
@@ -560,7 +560,7 @@ pub fn make_tests(
 
     let cache = HeadersCache::load(&config);
     let mut poisoned = false;
-    collect_tests_from_dir(
+    let directive_lines = collect_tests_from_dir(
         config.clone(),
         &cache,
         &config.src_base,
@@ -572,6 +572,17 @@ pub fn make_tests(
         &mut poisoned,
     )
     .unwrap_or_else(|_| panic!("Could not read tests from {}", config.src_base.display()));
+
+    let mut directive_lines_out_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(config.build_base.parent().unwrap().join("__directive_lines.txt"))
+        .unwrap();
+
+    for directive_line in directive_lines {
+        use std::io::Write;
+        write!(directive_lines_out_file, "{}", directive_line).unwrap();
+    }
 
     if poisoned {
         eprintln!();
@@ -649,19 +660,25 @@ fn collect_tests_from_dir(
     found_paths: &mut HashSet<PathBuf>,
     modified_tests: &Vec<PathBuf>,
     poisoned: &mut bool,
-) -> io::Result<()> {
+) -> io::Result<BTreeSet<String>> {
     // Ignore directories that contain a file named `compiletest-ignore-dir`.
     if dir.join("compiletest-ignore-dir").exists() {
-        return Ok(());
+        return Ok(BTreeSet::new());
     }
+
+    let mut directive_lines = BTreeSet::new();
 
     if config.mode == Mode::RunMake && dir.join("Makefile").exists() {
         let paths = TestPaths {
             file: dir.to_path_buf(),
             relative_dir: relative_dir_path.parent().unwrap().to_path_buf(),
         };
-        tests.extend(make_test(config, cache, &paths, inputs, poisoned));
-        return Ok(());
+
+        let (test, inner_directive_lines) = make_test(config, cache, &paths, inputs, poisoned);
+        directive_lines.extend(inner_directive_lines);
+
+        tests.extend(test);
+        return Ok(directive_lines);
     }
 
     // If we find a test foo/bar.rs, we have to build the
@@ -677,39 +694,47 @@ fn collect_tests_from_dir(
     // subdirectories we find, except for `aux` directories.
     // FIXME: this walks full tests tree, even if we have something to ignore
     // use walkdir/ignore like in tidy?
+    trace!(target: "xxx", dir = %dir.display());
     for file in fs::read_dir(dir)? {
         let file = file?;
         let file_path = file.path();
+        trace!(target: "xxx", file_path = %file_path.display());
         let file_name = file.file_name();
-        if is_test(&file_name) && (!config.only_modified || modified_tests.contains(&file_path)) {
-            debug!("found test file: {:?}", file_path.display());
+        if is_test(&file_name) {
+            trace!(target: "xxx", file_path = %file_path.display(), "is test file");
             let rel_test_path = relative_dir_path.join(file_path.file_stem().unwrap());
             found_paths.insert(rel_test_path);
-            let paths =
-                TestPaths { file: file_path, relative_dir: relative_dir_path.to_path_buf() };
+            let paths = TestPaths {
+                file: file_path.clone(),
+                relative_dir: relative_dir_path.to_path_buf(),
+            };
 
-            tests.extend(make_test(config.clone(), cache, &paths, inputs, poisoned))
+            let (test_desc_fn, inner_directive_lines) =
+                make_test(config.clone(), cache, &paths, inputs, poisoned);
+            trace!(target: "xxx", ?inner_directive_lines, path = %file_path.display());
+            directive_lines.extend(inner_directive_lines);
+
+            tests.extend(test_desc_fn);
         } else if file_path.is_dir() {
             let relative_file_path = relative_dir_path.join(file.file_name());
-            if &file_name != "auxiliary" {
-                debug!("found directory: {:?}", file_path.display());
-                collect_tests_from_dir(
-                    config.clone(),
-                    cache,
-                    &file_path,
-                    &relative_file_path,
-                    inputs,
-                    tests,
-                    found_paths,
-                    modified_tests,
-                    poisoned,
-                )?;
-            }
+            trace!(target: "xxx", path = %file_path.display(), "is directory");
+            let inner_directive_lines = collect_tests_from_dir(
+                config.clone(),
+                cache,
+                &file_path,
+                &relative_file_path,
+                inputs,
+                tests,
+                found_paths,
+                modified_tests,
+                poisoned,
+            )?;
+            directive_lines.extend(inner_directive_lines);
         } else {
-            debug!("found other file/directory: {:?}", file_path.display());
+            trace!(target: "xxx", path = %file_path.display(), "found other directory or file");
         }
     }
-    Ok(())
+    Ok(directive_lines)
 }
 
 /// Returns true if `file_name` looks like a proper test file name.
@@ -731,14 +756,18 @@ fn make_test(
     testpaths: &TestPaths,
     inputs: &Stamp,
     poisoned: &mut bool,
-) -> Vec<test::TestDescAndFn> {
+) -> (Vec<test::TestDescAndFn>, Vec<String>) {
     let test_path = if config.mode == Mode::RunMake {
         // Parse directives in the Makefile
         testpaths.file.join("Makefile")
     } else {
         PathBuf::from(&testpaths.file)
     };
-    let early_props = EarlyProps::from_file(&config, &test_path);
+
+    let (early_props, mut directive_lines) = EarlyProps::from_file(&config, &test_path);
+
+    let (_, late_directive_lines) = TestProps::from_file(&test_path, None, &config);
+    directive_lines.extend(late_directive_lines);
 
     // Incremental tests are special, they inherently cannot be run in parallel.
     // `runtest::run` will be responsible for iterating over revisions.
@@ -748,15 +777,16 @@ fn make_test(
         early_props.revisions.iter().map(|r| Some(r.as_str())).collect()
     };
 
-    revisions
+    let test_desc_fn = revisions
         .into_iter()
         .map(|revision| {
             let src_file =
                 std::fs::File::open(&test_path).expect("open test file to parse ignores");
             let test_name = crate::make_test_name(&config, testpaths, revision);
-            let mut desc = make_test_description(
+            let (mut desc, rev_directive_lines) = make_test_description(
                 &config, cache, test_name, &test_path, src_file, revision, poisoned,
             );
+            directive_lines.extend(rev_directive_lines);
             // Ignore tests that already run and are up to date with respect to inputs.
             if !config.force_rerun {
                 desc.ignore |= is_up_to_date(&config, testpaths, &early_props, revision, inputs);
@@ -766,7 +796,9 @@ fn make_test(
                 testfn: make_test_closure(config.clone(), testpaths, revision),
             }
         })
-        .collect()
+        .collect();
+
+    (test_desc_fn, directive_lines)
 }
 
 fn stamp(config: &Config, testpaths: &TestPaths, revision: Option<&str>) -> PathBuf {
@@ -898,15 +930,11 @@ fn make_test_name(
 }
 
 fn make_test_closure(
-    config: Arc<Config>,
-    testpaths: &TestPaths,
-    revision: Option<&str>,
+    _config: Arc<Config>,
+    _testpaths: &TestPaths,
+    _revision: Option<&str>,
 ) -> test::TestFn {
-    let config = config.clone();
-    let testpaths = testpaths.clone();
-    let revision = revision.map(str::to_owned);
     test::DynTestFn(Box::new(move || {
-        runtest::run(config, &testpaths, revision.as_deref());
         Ok(())
     }))
 }

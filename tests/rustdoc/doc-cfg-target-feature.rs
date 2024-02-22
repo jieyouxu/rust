@@ -1,6 +1,5 @@
 // only-x86_64
 // compile-flags:--test
-// should-fail
 
 // #49723: rustdoc didn't add target features when extracting or running doctests
 

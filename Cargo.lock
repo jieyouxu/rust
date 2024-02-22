@@ -761,6 +761,7 @@ dependencies = [
  "miow",
  "miropt-test-tools",
  "once_cell",
+ "rand",
  "regex",
  "rustfix",
  "serde",

@@ -117,7 +117,26 @@ If you want to install the `browser-ui-test` dependency, run `npm install browse
                     ..Default::default()
                 };
 
-                let test_props = TestProps::from_file(&librs, None, &compiletest_c);
+                let (test_props, directive_lines) =
+                    TestProps::from_file(&librs, None, &compiletest_c);
+
+                let mut directive_lines_path = PathBuf::new();
+                directive_lines_path.push(&config.rust_src);
+                directive_lines_path.push("build");
+                directive_lines_path.push(env::var("TARGET").unwrap());
+                directive_lines_path.push("test");
+                directive_lines_path.push("__directive_lines.txt");
+
+                let mut directive_lines_out_file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&directive_lines_path)
+                    .unwrap();
+
+                for directive_line in directive_lines {
+                    use std::io::Write;
+                    write!(directive_lines_out_file, "{}", directive_line).unwrap();
+                }
 
                 if !test_props.compile_flags.is_empty() {
                     cargo.env("RUSTDOCFLAGS", test_props.compile_flags.join(" "));

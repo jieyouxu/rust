@@ -1,5 +1,4 @@
 // compile-flags:--test
-// should-fail
 
 #![doc(test(attr(deny(warnings))))]
 

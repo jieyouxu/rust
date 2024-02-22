@@ -84,6 +84,7 @@ struct DiagnosticCode {
     code: String,
 }
 
+#[allow(dead_code)]
 pub fn rustfix_diagnostics_only(output: &str) -> String {
     output
         .lines()
