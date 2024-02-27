@@ -2,9 +2,9 @@
 //! Clippy.
 
 use crate::lints::{
-    BadOptAccessDiag, DefaultHashTypesDiag, DiagOutOfImpl, LintPassByHand, NonExistentDocKeyword,
-    QueryInstability, SpanUseEqCtxtDiag, TyQualified, TykindDiag, TykindKind, UntranslatableDiag,
-    UntranslatableDiagnosticTrivial,
+    BadOptAccessDiag, DefaultHashTypesDiag, DiagOutOfImpl, EmptyPanicsDiag, LintPassByHand,
+    NonExistentDocKeyword, QueryInstability, SpanUseEqCtxtDiag, TyQualified, TykindDiag,
+    TykindKind, UntranslatableDiag, UntranslatableDiagnosticTrivial,
 };
 use crate::{EarlyContext, EarlyLintPass, LateContext, LateLintPass, LintContext};
 use rustc_ast as ast;
@@ -566,5 +566,34 @@ fn is_span_ctxt_call(cx: &LateContext<'_>, expr: &Expr<'_>) -> bool {
             .is_some_and(|call_did| cx.tcx.is_diagnostic_item(sym::SpanCtxt, call_did)),
 
         _ => false,
+    }
+}
+
+declare_tool_lint! {
+    /// The `empty_panics` internal lint detects empty `panic!()`s without any contextual
+    /// information or explanation. For contributors or normal users, they would only get
+    /// a "panicked at" message which is not helpful for understanding the probably cause.
+    pub rustc::EMPTY_PANICS,
+    Deny,
+    "Usage of empty `panic!()`s without any contextual information",
+    report_in_external_macro: true
+}
+
+declare_lint_pass!(EmptyPanics => [EMPTY_PANICS]);
+
+impl EarlyLintPass for EmptyPanics {
+    fn check_expr(&mut self, cx: &EarlyContext<'_>, expr: &ast::Expr) {
+        const DEFAULT_EMPTY_PANIC_MESSAGE: &str = "explicit panic";
+
+        if let ast::ExprKind::Call(f, args) = &expr.kind
+            && let ast::ExprKind::Path(None, path) = &f.kind
+            && let Some(segment) = path.segments.last()
+            && segment.ident.name == sym::begin_panic
+            && let [arg] = args.as_slice()
+            && let ast::ExprKind::Lit(lit) = &arg.kind
+            && lit.symbol.as_str() == DEFAULT_EMPTY_PANIC_MESSAGE
+        {
+            cx.emit_span_lint(EMPTY_PANICS, expr.span, EmptyPanicsDiag { label: expr.span });
+        }
     }
 }

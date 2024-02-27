@@ -677,6 +677,13 @@ pub struct DropCopyDiag<'a> {
 }
 
 #[derive(LintDiagnostic)]
+#[diag(lint_empty_panics)]
+pub struct EmptyPanicsDiag {
+    #[label]
+    pub label: Span,
+}
+
+#[derive(LintDiagnostic)]
 #[diag(lint_forgetting_references)]
 #[note]
 pub struct ForgetRefDiag<'a> {

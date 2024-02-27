@@ -202,6 +202,9 @@ lint_dropping_references = calls to `std::mem::drop` with a reference instead of
     .label = argument has type `{$arg_ty}`
     .note = use `let _ = ...` to ignore the expression or result
 
+lint_empty_panics = empty `panic!()`s do not provide any contextual information for debugging, please add some context or explanation
+    .label = this `panic!()` does not have a message
+
 lint_enum_intrinsics_mem_discriminant =
     the return value of `mem::discriminant` is unspecified when called with a non-enum type
     .note = the argument to `discriminant` should be a reference to an enum, but it was passed a reference to a `{$ty_param}`, which is not an enum.

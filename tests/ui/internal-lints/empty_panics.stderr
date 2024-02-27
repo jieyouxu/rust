@@ -1,0 +1,16 @@
+error: empty `panic!()`s do not provide any contextual information for debugging, please add some context or explanation
+  --> $DIR/empty_panics.rs:7:5
+   |
+LL |     panic!()
+   |     ^^^^^^^^ this `panic!()` does not have a message
+   |
+note: the lint level is defined here
+  --> $DIR/empty_panics.rs:4:11
+   |
+LL | #![forbid(rustc::empty_panics)]
+   |           ^^^^^^^^^^^^^^^^^^^
+   = note: this error originates in the macro `$crate::panic::panic_2015` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+DEBUG rustc_lint::internal span=$SRC_DIR/std/src/panic.rs:LL:COL (#7), def_id=DefId(1:7505 ~ std[3461]::panicking::begin_panic), args=[&ReErased str]
+error: aborting due to 1 previous error
+
