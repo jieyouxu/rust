@@ -19,6 +19,8 @@
 //@ [legacy] compile-flags: -Zunstable-options -Csymbol-mangling-version=legacy
 //@     [v0] compile-flags: -Csymbol-mangling-version=v0
 
+#![allow(rustc::empty_panics)]
+
 fn main() {
     panic!()
 }
