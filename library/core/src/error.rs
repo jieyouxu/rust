@@ -22,7 +22,7 @@ use crate::fmt::{Debug, Display, Formatter, Result};
 /// accessing that error via [`Error::source()`]. This makes it possible for the
 /// high-level module to provide its own errors while also revealing some of the
 /// implementation for debugging.
-#[stable(feature = "rust1", since = "1.0.0")]
+#[stable(feature = "error_in_core", since = "1.81.0")]
 #[cfg_attr(not(test), rustc_diagnostic_item = "Error")]
 #[rustc_has_incoherent_inherent_impls]
 #[allow(multiple_supertrait_upcastable)]
