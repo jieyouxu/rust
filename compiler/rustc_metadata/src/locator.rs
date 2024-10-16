@@ -706,49 +706,45 @@ impl<'a> CrateLocator<'a> {
         let mut rmetas = FxIndexMap::default();
         let mut dylibs = FxIndexMap::default();
         for loc in &self.exact_paths {
-            if !loc.canonicalized().exists() {
-                return Err(CrateError::ExternLocationNotExist(
-                    self.crate_name,
-                    loc.original().clone(),
-                ));
+            let canon_loc = loc.canonicalized();
+            let og_loc = loc.original();
+
+            if !canon_loc.exists() {
+                return Err(CrateError::ExternLocationNotExist(self.crate_name, og_loc.clone()));
             }
-            if !loc.original().is_file() {
-                return Err(CrateError::ExternLocationNotFile(
-                    self.crate_name,
-                    loc.original().clone(),
-                ));
+            if !og_loc.is_file() {
+                return Err(CrateError::ExternLocationNotFile(self.crate_name, og_loc.clone()));
             }
-            let Some(file) = loc.original().file_name().and_then(|s| s.to_str()) else {
-                return Err(CrateError::ExternLocationNotFile(
-                    self.crate_name,
-                    loc.original().clone(),
-                ));
+
+            let Some(file) = og_loc.file_name().and_then(|s| s.to_str()) else {
+                return Err(CrateError::ExternLocationNotFile(self.crate_name, og_loc.clone()));
             };
 
-            if file.starts_with("lib") && (file.ends_with(".rlib") || file.ends_with(".rmeta"))
-                || file.starts_with(self.target.dll_prefix.as_ref())
-                    && file.ends_with(self.target.dll_suffix.as_ref())
-            {
-                // Make sure there's at most one rlib and at most one dylib.
-                // Note to take care and match against the non-canonicalized name:
-                // some systems save build artifacts into content-addressed stores
-                // that do not preserve extensions, and then link to them using
-                // e.g. symbolic links. If we canonicalize too early, we resolve
-                // the symlink, the file type is lost and we might treat rlibs and
-                // rmetas as dylibs.
-                let loc_canon = loc.canonicalized().clone();
-                let loc = loc.original();
-                if loc.file_name().unwrap().to_str().unwrap().ends_with(".rlib") {
-                    rlibs.insert(loc_canon, PathKind::ExternFlag);
-                } else if loc.file_name().unwrap().to_str().unwrap().ends_with(".rmeta") {
-                    rmetas.insert(loc_canon, PathKind::ExternFlag);
-                } else {
-                    dylibs.insert(loc_canon, PathKind::ExternFlag);
-                }
+            let rlib_like =
+                |file_name: &str| file_name.starts_with("lib") && file_name.ends_with(".rlib");
+            let rmeta_like =
+                |file_name: &str| file_name.starts_with("lib") && file_name.ends_with(".rmeta");
+            let dll_like = |file_name: &str| {
+                file_name.starts_with(self.target.dll_prefix.as_ref())
+                    && file_name.ends_with(self.target.dll_suffix.as_ref())
+            };
+
+            // Make sure there's at most one rlib and at most one dylib.
+            //
+            // Note to take care and match against the non-canonicalized name: some systems save
+            // build artifacts into content-addressed stores that do not preserve extensions, and
+            // then link to them using e.g. symbolic links. If we canonicalize too early, we resolve
+            // the symlink, the file type is lost and we might treat rlibs and rmetas as dylibs.
+            if rlib_like(file) {
+                rlibs.insert(canon_loc.clone(), PathKind::ExternFlag);
+            } else if rmeta_like(file) {
+                rmetas.insert(canon_loc.clone(), PathKind::ExternFlag);
+            } else if dll_like(file) {
+                dylibs.insert(canon_loc.clone(), PathKind::ExternFlag);
             } else {
                 self.crate_rejections
                     .via_filename
-                    .push(CrateMismatch { path: loc.original().clone(), got: String::new() });
+                    .push(CrateMismatch { path: og_loc.clone(), got: String::new() });
             }
         }
 
