@@ -136,6 +136,6 @@ pub use builtin_attrs::{
 };
 pub use removed::REMOVED_LANG_FEATURES;
 pub use unstable::{
-    EnabledLangFeature, Features, INCOMPATIBLE_FEATURES, LangFeatureStability,
+    EnabledLangFeature, EnabledLibFeature, Features, INCOMPATIBLE_FEATURES, LangFeatureStability,
     UNSTABLE_LANG_FEATURES,
 };
